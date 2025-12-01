@@ -1,0 +1,98 @@
+# Версия ClickHouse
+clickhouseVersion: "23.8"
+
+# Количество реплик 
+replicaCount: 1
+
+# Конфигурация образа
+image:
+  repository: clickhouse/clickhouse-server
+  pullPolicy: IfNotPresent
+
+# Конфигурация сервиса
+service:
+  type: ClusterIP
+  port: 8123
+  nativePort: 9000
+  mysqlPort: 9004
+  postgresqlPort: 9005
+  annotations: {}
+  loadBalancerIP: ""
+  externalTrafficPolicy: "Cluster"
+
+# Настройки сетевой политики
+networkPolicy:
+  enabled: false 
+  allowedNamespaces: []
+  podSelector:
+    matchLabels: {}
+  allowedPorts:
+    - http
+    - native
+    - mysql
+    - postgresql
+
+# Хранилище
+persistence:
+  enabled: true
+  storageClassName: "standard"
+  size: 10Gi
+
+# Конфигурация ClickHouse
+config:
+  # Базовые настройки
+  listen_host: "0.0.0.0"
+  max_connections: 4096
+  keep_alive_timeout: 3
+  uncompressed_cache_size: 8589934592
+  mark_cache_size: 5368709120
+  
+  # Пользователи 
+  users:
+    admin:
+      password: "admin123"
+      profile: "default"
+      quotas: "default"
+      networks:
+        ip: "::/0"
+    readonly:
+      password: "readonly123"
+      profile: "readonly"
+      quotas: "default"
+      networks:
+        ip: "::/0"
+
+# Настройки профилей
+profiles:
+  readonly:
+    readonly: 1
+    max_memory_usage: 10000000000
+
+# Ресурсы контейнера 
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Настройки зондов здоровья
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Дополнительные переменные окружения
+env:
+  - name: TZ
+    value: "UTC"
+  - name: CLICKHOUSE_DB
+    value: "default"

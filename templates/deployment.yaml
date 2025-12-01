@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "clickhouse.fullname" . }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+spec:
+  # Single-инсталляция 
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "clickhouse.fullname" . }}
+  
+  selector:
+    matchLabels:
+      {{- include "clickhouse.selectorLabels" . | nindent 6 }}
+  
+  # Persistent storage 
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      {{- if .Values.persistence.storageClassName }}
+      storageClassName: {{ .Values.persistence.storageClassName }}
+      {{- end }}
+  {{- end }}
+  
+  template:
+    metadata:
+      labels:
+        {{- include "clickhouse.selectorLabels" . | nindent 8 }}
+    
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        # Возможность указать версию ClickHouse 
+        image: "{{ .Values.image.repository }}:{{ .Values.clickhouseVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        
+        # Порты для всех интерфейсов ClickHouse
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        - name: native
+          containerPort: {{ .Values.service.nativePort }}
+          protocol: TCP
+        - name: mysql
+          containerPort: {{ .Values.service.mysqlPort | default 9004 }}
+          protocol: TCP
+        - name: postgresql
+          containerPort: {{ .Values.service.postgresqlPort | default 9005 }}
+          protocol: TCP
+        
+        # Монтирование конфигурации
+        volumeMounts:
+        - name: config
+          mountPath: /etc/clickhouse-server/config.d/
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          mountPath: /var/lib/clickhouse
+        {{- end }}
+        
+        # Базовые ресурсы 
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        
+        # Health checks для надежности
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+        
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+        
+        # Переменные окружения
+        env:
+        - name: CLICKHOUSE_VERSION
+          value: "{{ .Values.clickhouseVersion }}"
+        - name: CLICKHOUSE_DB
+          value: "default"
+        {{- range .Values.env }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom: {{- toYaml .valueFrom | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "clickhouse.fullname" . }}-config

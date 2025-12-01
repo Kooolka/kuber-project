@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "clickhouse.fullname" . }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.service.annotations }}
+    {{ toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.service.port }}
+    targetPort: http
+    protocol: TCP
+    # Документируем назначение порта
+    # 8123 - HTTP интерфейс для запросов
+  - name: native
+    port: {{ .Values.service.nativePort }}
+    targetPort: native
+    protocol: TCP
+    # 9000 - Native протокол для ClickHouse client
+  - name: mysql
+    port: {{ .Values.service.mysqlPort | default 9004 }}
+    targetPort: mysql
+    protocol: TCP
+    # 9004 - MySQL совместимый интерфейс 
+  - name: postgresql
+    port: {{ .Values.service.postgresqlPort | default 9005 }}
+    targetPort: postgresql
+    protocol: TCP
+    # 9005 - PostgreSQL совместимый интерфейс 
+  selector:
+    {{- include "clickhouse.selectorLabels" . | nindent 4 }}
+  # Дополнительные настройки для LoadBalancer/NodePort
+  {{- if eq .Values.service.type "LoadBalancer" }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP | default "" }}
+  {{- end }}
+  {{- if eq .Values.service.type "NodePort" }}
+  externalTrafficPolicy: {{ .Values.service.externalTrafficPolicy | default "Cluster" }}
+  {{- end }}
